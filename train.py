@@ -24,8 +24,29 @@ from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
 
+import torch.utils.data.distributed
+import horovod.torch as hvd
+
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
+
+    use_cuda = opt.gpu_ids != "-1" and torch.cuda.is_available()
+    # Horovod: initialize library.
+    hvd.init()
+    torch.manual_seed(42)
+
+    gpu_id = "-1"
+    if use_cuda:
+        # Horovod: pin GPU to local rank.
+        gpu_id = str(hvd.local_rank())
+        torch.cuda.set_device(int(gpu_id))
+        torch.cuda.manual_seed(42)
+    # print("Horovod rank %d use GPU %s" % (hvd.local_rank(), gpu_id))
+    opt.gpu_id = gpu_id
+
+    # Horovod: limit # of CPU threads to be used per worker.
+    torch.set_num_threads(1)
+
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     print('The number of training images = %d' % dataset_size)
@@ -63,13 +84,13 @@ if __name__ == '__main__':
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
 
-            if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
+            if total_iters % opt.save_latest_freq == 0 and hvd.rank() == 0:   # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
                 save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
                 model.save_networks(save_suffix)
 
             iter_data_time = time.time()
-        if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
+        if epoch % opt.save_epoch_freq == 0 and hvd.rank() == 0:              # cache our model every <save_epoch_freq> epochs
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)

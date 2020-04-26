@@ -30,9 +30,13 @@ class BaseModel(ABC):
             -- self.optimizers (optimizer list):    define and initialize optimizers. You can define one optimizer for each network. If two networks are updated at the same time, you can use itertools.chain to group them. See cycle_gan_model.py for an example.
         """
         self.opt = opt
-        self.gpu_ids = opt.gpu_ids
+        # self.gpu_ids = opt.gpu_ids
+        self.gpu_ids = int(opt.gpu_id)
         self.isTrain = opt.isTrain
-        self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')  # get device name: CPU or GPU
+        # self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')  # get device name: CPU or GPU
+        self.device = torch.device('cuda:{}'.format(self.gpu_ids)) if self.gpu_ids != "-1" else torch.device('cpu')  # get device name: CPU or GPU
+        # self.device = torch.device('cuda:{}'.format(self.gpu_ids))
+        print("use device %s" % self.device)
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)  # save all the checkpoints to save_dir
         if opt.preprocess != 'scale_width':  # with [scale_width], input images might have different sizes, which hurts the performance of cudnn.benchmark.
             torch.backends.cudnn.benchmark = True
@@ -152,9 +156,9 @@ class BaseModel(ABC):
                 save_path = os.path.join(self.save_dir, save_filename)
                 net = getattr(self, 'net' + name)
 
-                if len(self.gpu_ids) > 0 and torch.cuda.is_available():
+                if self.gpu_ids != "-1" and torch.cuda.is_available():
                     torch.save(net.module.cpu().state_dict(), save_path)
-                    net.cuda(self.gpu_ids[0])
+                    net.cuda(int(self.gpu_ids))
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
 
